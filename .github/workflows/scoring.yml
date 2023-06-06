@@ -1,0 +1,134 @@
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  automated-testing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: Install k6
+        run: |
+          curl https://github.com/grafana/k6/releases/download/v0.44.0/k6-v0.44.0-linux-amd64.tar.gz -L | tar xvz --strip-components 1
+
+      - name: Install
+        run: npm install
+
+      - name: Install wait-on (wait for port 3000)
+        run: npm install --save-dev wait-on
+
+      - name: Install wait-on (wait for port 3000)
+        run: npm install --save-dev wait-on
+
+      - name: Generate API coverage using Jest
+        run: npm test
+
+      - name: Run server with k6
+        run: |
+          node . &
+          sleep 5
+          ./node_modules/.bin/wait-on tcp:3000
+          ./k6 run k6-testing/queue-test.js 
+          ./k6 run k6-testing/stack-test.js
+
+      - name: Update solution
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          result-encoding: string
+          script: |
+
+            const fs = require('fs')
+
+            const jsonString = fs.readFileSync('./coverage/coverage-summary.json')
+            const output = JSON.parse(jsonString)
+
+            const queueCoverage = [];
+            const stackCoverage= [];
+
+            // Get Unit test coverage for Queue & Stack
+            for (t in output){
+                if (!t.includes("stack") && !t.includes("queue")) {
+                    continue
+                }
+                for (el in output[t]){
+                    if (t.includes("stack")){
+                        // Stack
+                        stackCoverage.push(output[t][el]["pct"]) 
+                    } else {
+                        // Queue 
+                        queueCoverage.push(output[t][el]["pct"]) 
+                    }
+                }
+            }
+
+            // Unit test coverage is bigger than 80%
+            const queueCoverageFails= queueCoverage.reduce( (res, curr) => res + (curr < 80), 0) > 0
+            const stackCoverageFails= stackCoverage.reduce( (res, curr) => res + (curr < 80), 0) > 0
+
+            // All unit tests must pass --> Stack
+            const stackString = fs.readFileSync('./stack-tests.json')
+            const stackOutput = JSON.parse(stackString)
+            let stackUnitTestFailed = stackOutput["fail"] > 0
+
+            // All unit tests must pass --> Stack
+            const queueString = fs.readFileSync('./queue-tests.json')
+            const queueOutput = JSON.parse(queueString)
+            let queueUnitTestFailed = queueOutput["fail"] > 0
+
+            // Results
+            const queueUnitTest = !(queueUnitTestFailed + queueCoverageFails) // Array Index 0
+            const stackUnitTest = !(stackUnitTestFailed + stackCoverageFails) // Array Index 1
+
+            // K6 run --> Queue
+            const queuek6 = fs.readFileSync('./k6-queue-summary.json')
+            const queuek6Json = JSON.parse(queuek6)
+            const queueK6Test= queuek6Json["values"]["fails"] == 0
+
+            // K6 run --> Stack
+            const stackk6 = fs.readFileSync('./k6-stack-summary.json')
+            const stackk6Json = JSON.parse(stackk6)
+            const stackK6Test= stackk6Json["values"]["fails"]  == 0
+
+            // Array results (assertionResults): [0, 1, 2, 3] 
+            // 0 -> Unit testing Queue --> queueUnitTest
+            // 1 -> Unit testing Stack --> stackUnitTest
+            // 2 -> K6 testing Queue   --> queueK6Test
+            // 3 -> K6 testing Stack   --> stackK6Test
+
+            const assertionResults = []
+
+            if (queueUnitTest) assertionResults.push(0)
+            if (stackUnitTest) assertionResults.push(1)
+            if (queueK6Test) assertionResults.push(2)
+            if (stackK6Test) assertionResults.push(3)
+
+            console.log("Updating score...");
+
+            try {
+              await github.request(
+                `PATCH https://api.nuwe.io/projects/${process.env.PROJECT_ID}/objectives`,
+                {
+                  bearerToken: process.env.PERSONAL_TOKEN,
+                  assertionResults,
+                }
+              );
+
+              console.log("Done");
+            } catch (e) {
+              core.error("API connection error");
+              core.setFailed(e);
+            }
+
+      - name: SonarQube scan 🚨
+        if: always()
+        uses: sonarsource/sonarqube-scan-action@master
+        with:
+          args: >
+            -Dsonar.projectKey=${{ github.event.repository.name }}
