@@ -1,0 +1,10 @@
+index.js @team-nuwe
+analytics.js @team-nuwe
+jest.config.js @team-nuwe
+LICENSE @team-nuwe
+package.json @team-nuwe
+package-lock.json @team-nuwe
+/routes/common-routes.js @team-nuwe
+/.github/** @team-nuwe
+/unit-testing/** @team-nuwe
+/k6-testing/** @team-nuwe
