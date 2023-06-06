@@ -1,0 +1,21 @@
+{
+  "name": "nuwe-tech-validation",
+  "version": "1.0.0",
+  "description": "NUWE Backend challenge for Tech Validation in NodeJS 20.2.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "k6q": "k6 run k6-testing/queue-test.js",
+    "k6s": "k6 run k6-testing/stack-test.js"
+  },
+  "author": "Hector Alarcon",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.0.3",
+    "fastify": "^4.17.0",
+    "wait-on": "^7.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0"
+  }
+}
